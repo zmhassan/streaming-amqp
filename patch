@@ -1,0 +1,1987 @@
+diff --git a/.travis.yml b/.travis.yml
+deleted file mode 100644
+index 4c82876..0000000
+--- a/.travis.yml
++++ /dev/null
+@@ -1,5 +0,0 @@
+-language: java
+-jdk:
+-    - oraclejdk8
+-notifications:
+-    email: false
+\ No newline at end of file
+diff --git a/README.md b/README.md
+index 9f8fe89..a9a4bbe 100644
+--- a/README.md
++++ b/README.md
+@@ -1,132 +1,25 @@
+-[![Build Status](https://travis-ci.org/radanalyticsio/streaming-amqp.svg?branch=master)](https://travis-ci.org/radanalyticsio/streaming-amqp)
+-
+ # AMQP connector for Spark Streaming
+ 
+-This project provides an [AMQP](https://www.amqp.org/) (Advanced Message Queuing Protocol) connector for [Apache Spark Streaming](http://spark.apache.org/streaming/) in order to ingest data as a stream from all possible AMQP based sources like :
++This project provides an [AMQP](https://www.amqp.org/)(Advanced Message Queuing Protocol) connector for Apache Spark Streaming in order to ingest data as a stream from all possible AMQP based products like :
+ 
+-* a pure AMQP server, which exposes a sender node for sending messages in a peer to peer fashion with the connector
+-* a messaging broker, which supports AMQP protocol and provide "store and forward" mechanism from queues and topics/subscriptions for the connector
+-* a router network, which provides AMQP routing with direct messaging or link routing
++* a pure server
++* a messaging broker
++* a router network
+ 
+-The implementation offers the following receivers :
++The implementation offers following receivers :
+ 
+-* a non reliable receiver which doesn't settle the messages received from the AMQP sender
+-* a reliable receiver which settles messages received from the AMQP sender only after storing them reliably in the Spark cluster (it uses the checkpoint and write ahead log features)
++* a non reliable receiver which doesn't settle the messages received from the AMQP sender 
++* a reliable receiver which settles messages received from the AMQP after only after storing them reliably in the Spark cluster (it uses the checkpoint and write ahead log features)
+ 
+-The stream doesn't provide the received AMQP messages directly as elements of the RDDs micro batches but from the driver it's possible to pass a converter function in order to convert each message in the desidered format; it will be the type of the elements inside the RDDs micro batches. Two built in message converter functions are provided (as sample) :
++The stream doesn't provide the received AMQP messages directly but from the driver it's possible to pass a converter function in order to convert each message in the desidered format. Two built in message converter functions are provided :
+ 
+-* _AMQPBodyFunction[T]_ : a converter which returns only the AMQP message body in a custom serializable type T
+-* _AMQPJsonFunction_ : a converter which returns the JSON string representation of the entire AMQP message
++* a converter which returns only the AMQP message body in a custom type T
++* a converter which returns the JSON string representation of the entire AMQP message
+ 
+ ## Project References
+ 
+-Using **Maven**
+-
+-```
+-<dependency>
+-    <groupId>io.radanalytics</groupId>
+-    <artifactId>spark-streaming-amqp_2.11</artifactId>
+-    <version>0.3.0</version>
+-</dependency>
+-```
+-
+-Using **SBT**
+-
+-```
+-libraryDependencies += "io.radanalytics" %% "spark-streaming-amqp" % "0.3.0"
+-```
+-
+-The library can be added to a Spark job launched through `spark-shell` or `spark-submit` using the `--packages` or `--jars` command line options. In order to use the `--packages` option, the library needs to be installed into the local repository.
+-
+-```
+-bin/spark-shell --packages io.radanalytics:spark-streaming-amqp_2.11:0.3.0
+-```
+-> About installing package in the local repository, the `mvn clean install` command (for Maven) or the `sbt publish` (for SBT) need to be used.
+-
+-## Receivers
+-
+-The AMQP receiver is started using the **_AMQPUtils.createStream_** method which returns an _InputDStream_ and needs following parameters :
+-
+-* **ssc** : instance of a _StreamingContext_
+-* **host** : hostname or IP address of the remote AMQP node to connect
+-* **port** : port of the remote AMQP node to connect
+-* **address** : AMQP address for which starting to receive messages
+-* **messageConverter** : a callback function which is called for every received AMQP message for converting it in the user desidered format that will be stored into the RDDs micro batches. It gets a Proton _Message_ instance as input and must returns an _Option[T]_ where _T_ is the serializable desired type by the user
+-* **storageLevel** : Spark storage level to use
+-
+-Using default Spark configuration, a _non reliable_ receiver is started. In order to use the _reliable_ version, the WAL (Write Ahead Logs) and checkpoing must be enabled in the driver application. The WAL is enabled setting the following configuration parameter to _true_ :
+-
+-```
+-spark.streaming.receiver.writeAheadLog.enable
+-```
+-
+-### Scala
+-
+-```scala
+-val converter = new AMQPBodyFunction[String]
+-
+-val receiveStream = AMQPUtils.createStream(ssc,
+-                host, port, address,
+-                converter, StorageLevel.MEMORY_ONLY)
+-```
+-
+-### Java
+-
+-```java
+-Function converter = new JavaAMQPBodyFunction<String>();
+-
+-String sendMessage = "Spark Streaming & AMQP";
+-JavaReceiverInputDStream<String>  receiveStream =
+-        AMQPUtils.createStream(this.jssc,
+-                this.host,
+-                this.port,
+-                this.username,
+-                this.password,
+-                this.address, converter, StorageLevel.MEMORY_ONLY());
+-```
+-
+-### Python
+-
+-The Python API leverages on the JSON converter and the RDDs micro batches always contain a String with the JSON representation of the received AMQP message.
+-
+-```python
+-receiveStream = AMQPUtils.createStream(ssc, host, port, address)
+-```
++TBD
+ 
+ ## Example
+ 
+-The Scala example provided with the current project is related to a simple IoT scenario where the AMQP receiver gets temperature values from a _temperature_ address. It could be the name of a queue on a broker or a direct address inside a router network where a device is sending data.
+-
+-The following message converter function is used, in order to estract the temperature value as an _Int_ from the AMQP message body.
+-
+-```scala
+-def messageConverter(message: Message): Option[Int] = {
+-  message.getBody match {
+-      case body: Data => {
+-        val temp: Int = new String(body.getValue.getArray).toInt
+-        Some(temp)
+-      }
+-      case body: AmqpValue => {
+-        val temp: Int = body.asInstanceOf[AmqpValue].getValue.asInstanceOf[String].toInt
+-        Some(temp)
+-      }
+-      case _ => None
+-  }
+-}
+-```
+-
+-The input stream returned by the AMQP receiver is processed with the _reduceByWindow_ method in order to get the maximum temperature value in a sliding window (5 seconds on top of a batch interval of 1 second).
+-
+-```scala
+-val receiveStream = AMQPUtils.createStream(ssc, host, port, username, password, address, messageConverter _, StorageLevel.MEMORY_ONLY)
+-
+-// get maximum temperature in a window
+-val max = receiveStream.reduceByWindow((a,b) => if (a > b) a else b, Seconds(5), Seconds(5))
+-
+-max.print()
+-```
+-
+-The full source code is available in the examples folder with the same version in Python.
+-
+-## Releasing
+-For details about releasing new version please consult [RELEASING.md](./RELEASING.md)
++TBD
+diff --git a/RELEASING.md b/RELEASING.md
+deleted file mode 100644
+index a638ede..0000000
+--- a/RELEASING.md
++++ /dev/null
+@@ -1,42 +0,0 @@
+-# Releasing
+-
+-In order to create and publish the new version of Maven artifact you have to have an account on http://developer.jboss.org and have the permissions for releasing.
+-
+-Next step is using the same credentials and saving them into your Maven settings. 
+-
+-Here is the minimal example of the `~/.m2/settings.xml`:
+-
+-```xml
+-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+-      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+-      xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+-                          https://maven.apache.org/xsd/settings-1.0.0.xsd">
+-  <servers>
+-    <server>
+-      <id>jboss-nexus-thirdparty</id>
+-      <username>your_username</username>
+-      <password>your_password</password>
+-    </server>
+-  </servers>
+-</settings>
+-```
+-
+-If you don't want to save your credentials in plain-text, you may want to use the [password encryption](http://maven.apache.org/guides/mini/guide-encryption.html).
+-
+-> Note that server id (`jboss-nexus-thirdparty`) has to match with the server id, defined in the [pom.xml](./pom.xml).
+-
+-Next step is using the `maven-release-plugin` to do its job and push the artifact to the staging repository.
+-
+-To do that, simply run:
+-
+-```bash
+-mvn -Dresume=false release:prepare release:perform
+-```
+-
+-It will ask about the version number you want to release, tag that will be created in the Git repository and the next snapshot version that will be put in the pom.xml.
+-
+-The final step is doing the sanity checking in https://repository.jboss.org/nexus/index.html#stagingRepositories. Simply find your staging profile in the list (sorting by date helps), click on `close` and then on `release`.
+-
+-That's it, you've just released into JBoss Nexus Maven repository. It syncs to Maven central, but it may take a day to get there.
+-
+-You should also find your artifact in https://repository.jboss.org/nexus/service/local/repositories/releases/content/io/radanalytics/spark-streaming-amqp_2.11/
+diff --git a/build.sbt b/build.sbt
+new file mode 100644
+index 0000000..9ab2c40
+--- /dev/null
++++ b/build.sbt
+@@ -0,0 +1,58 @@
++name := "spark-streaming-amqp"
++
++organization := "org.spark-project"
++
++scalaVersion in ThisBuild := "2.11.8"
++
++version := "0.1.0"
++
++unmanagedResourceDirectories in Compile += baseDirectory.value / "python"
++
++// **** from the sbt-spark-package plugin ****
++
++spName := "org.spark-project/dstream-amqp" // the name of your Spark Package
++
++sparkVersion in ThisBuild := "2.0.0" // the Spark Version your package depends on
++
++sparkComponents in ThisBuild := Seq("streaming") // creates a dependency on spark-streaming
++
++val vertxProton = "3.2.0"
++
++libraryDependencies ++= Seq(
++  // 2.0.0-preview brings jackson-module-scala_2.11:2.5.3 but Vert.x Proton brings all jackson.core JARs 2.6.5
++  // there is a conflict and a Spark Streaming exception. I'm going to exclude jackson.core JARS from Vert.x Proton
++  // Waiting for Spark 2.0.0-rc1 which fixes that
++  //"io.vertx" % "vertx-proton" % vertxProton excludeAll(ExclusionRule(organization = "com.fasterxml.jackson.core")),
++  "io.vertx" % "vertx-proton" % vertxProton,
++  "org.scalatest" %% "scalatest" % "2.2.5" % "test",
++  "com.novocode" % "junit-interface" % "0.11" % "test",
++  "org.apache.activemq" % "activemq-broker" % "5.13.3" % "test",
++  "org.apache.activemq" % "activemq-amqp" % "5.13.3" % "test",
++  "org.apache.spark" %% "spark-core" % sparkVersion.value % "provided" classifier "tests"
++)
++
++val root = project in file(".")
++
++val examples = project in file("examples") dependsOn (root % "compile->compile") settings (
++  libraryDependencies ++= Seq(
++    // Explicitly declare them to run examples using run-main.
++    "org.apache.spark" %% "spark-core" % sparkVersion.value,
++    "org.apache.spark" %% "spark-streaming" % sparkVersion.value
++  )
++)
++
++// avoid to include all Scala packages into the fatjar
++assemblyOption in assembly := (assemblyOption in assembly).value.copy(
++  includeScala = false
++)
++
++assemblyMergeStrategy in assembly := {
++  case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
++  case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.first
++  case x =>
++    val oldStrategy = (assemblyMergeStrategy in assembly).value
++    oldStrategy(x)
++}
++
++// to skip the test during assembly,
++test in assembly := {}
+\ No newline at end of file
+diff --git a/examples/src/main/resources/log4j.properties b/examples/src/main/resources/log4j.properties
+deleted file mode 100644
+index 393e087..0000000
+--- a/examples/src/main/resources/log4j.properties
++++ /dev/null
+@@ -1,8 +0,0 @@
+-# Root logger option
+-log4j.rootLogger=INFO, stdout
+-
+-# Direct log messages to stdout
+-log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+-log4j.appender.stdout.Target=System.out
+-log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+-log4j.appender.stdout.layout.ConversionPattern=%d{yyyy-MM-dd HH:mm:ss} %-5p %c{1}:%L - %m%n
+\ No newline at end of file
+diff --git a/examples/src/main/scala/io/radanalytics/examples/streaming/amqp/AMQPTemperature.scala b/examples/src/main/scala/org/apache/spark/examples/streaming/amqp/AMQPTemperature.scala
+similarity index 87%
+rename from examples/src/main/scala/io/radanalytics/examples/streaming/amqp/AMQPTemperature.scala
+rename to examples/src/main/scala/org/apache/spark/examples/streaming/amqp/AMQPTemperature.scala
+index 57906cc..5006080 100644
+--- a/examples/src/main/scala/io/radanalytics/examples/streaming/amqp/AMQPTemperature.scala
++++ b/examples/src/main/scala/org/apache/spark/examples/streaming/amqp/AMQPTemperature.scala
+@@ -15,21 +15,20 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.examples.streaming.amqp
++package org.apache.spark.examples.streaming.amqp
+ 
+ import java.lang.Long
+ 
+ import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+ import com.fasterxml.jackson.module.scala.DefaultScalaModule
+-import io.radanalytics.streaming.amqp.AMQPJsonFunction
+ import io.vertx.core.{AsyncResult, Handler, Vertx}
+ import io.vertx.proton._
+ import org.apache.log4j.{Level, Logger}
+-import org.apache.qpid.proton.amqp.messaging.{AmqpValue, Data}
++import org.apache.qpid.proton.amqp.messaging.{AmqpValue, Section}
+ import org.apache.qpid.proton.message.Message
+ import org.apache.spark.SparkConf
+ import org.apache.spark.storage.StorageLevel
+-import org.apache.spark.streaming.amqp.AMQPUtils
++import org.apache.spark.streaming.amqp.{AMQPJsonFunction, AMQPUtils}
+ import org.apache.spark.streaming.{Duration, Seconds, StreamingContext}
+ 
+ import scala.util.Random
+@@ -45,11 +44,9 @@ object AMQPTemperature {
+   private val batchDuration: Duration = Seconds(1)
+   private val checkpointDir: String = "/tmp/spark-streaming-amqp"
+ 
+-  private val host: String = "172.30.168.178"
++  private val host: String = "localhost"
+   private val port: Int = 5672
+   private val address: String = "temperature"
+-  private val username: Option[String] = Option("paolo")
+-  private val password: Option[String] = Option("mypassword")
+ 
+   private val jsonMessageConverter: AMQPJsonFunction = new AMQPJsonFunction()
+ 
+@@ -68,16 +65,12 @@ object AMQPTemperature {
+ 
+   def messageConverter(message: Message): Option[Int] = {
+ 
+-    message.getBody match {
+-      case body: Data => {
+-        val temp: Int = new String(body.getValue.getArray).toInt
+-        Some(temp)
+-      }
+-      case body: AmqpValue => {
+-        val temp: Int = body.asInstanceOf[AmqpValue].getValue.asInstanceOf[String].toInt
+-        Some(temp)
+-      }
+-      case _ => None
++    val body: Section = message.getBody()
++    if (body.isInstanceOf[AmqpValue]) {
++      val temp: Int = body.asInstanceOf[AmqpValue].getValue().asInstanceOf[String].toInt
++      Some(temp)
++    } else {
++      None
+     }
+   }
+ 
+@@ -91,7 +84,7 @@ object AMQPTemperature {
+     val ssc = new StreamingContext(conf, batchDuration)
+     ssc.checkpoint(checkpointDir)
+ 
+-    val receiveStream = AMQPUtils.createStream(ssc, host, port, username, password, address, messageConverter _, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, host, port, address, messageConverter _, StorageLevel.MEMORY_ONLY)
+ 
+     // get maximum temperature in a window
+     val max = receiveStream.reduceByWindow((a,b) => if (a > b) a else b, Seconds(5), Seconds(5))
+@@ -111,7 +104,7 @@ object AMQPTemperature {
+     val ssc = new StreamingContext(conf, batchDuration)
+     ssc.checkpoint(checkpointDir)
+ 
+-    val receiveStream = AMQPUtils.createStream(ssc, host, port, username, password, address, jsonMessageConverter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, host, port, address, jsonMessageConverter, StorageLevel.MEMORY_ONLY)
+ 
+     val temperature = receiveStream.map(jsonMsg => {
+ 
+diff --git a/pom.xml b/pom.xml
+index b077c5d..2a25714 100644
+--- a/pom.xml
++++ b/pom.xml
+@@ -1,48 +1,29 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
++<project xmlns="http://maven.apache.org/POM/4.0.0"
++         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
++         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+     <modelVersion>4.0.0</modelVersion>
+ 
+-    <groupId>io.radanalytics</groupId>
++    <groupId>org.apache.spark</groupId>
+     <artifactId>spark-streaming-amqp_2.11</artifactId>
+-    <version>0.3.2-SNAPSHOT</version>
++    <version>0.1.0</version>
+     <packaging>jar</packaging>
+ 
+     <name>Spark Streaming AMQP</name>
+     <description>AQMP connector for Apache Spark Streaming</description>
+     <url>http://spark.apache.org/</url>
+ 
+-    <scm>
+-        <url>https://github.com/radanalyticsio/streaming-amqp</url>
+-        <connection>scm:git:https://github.com/radanalyticsio/streaming-amqp</connection>
+-        <developerConnection>scm:git:git@github.com:radanalyticsio/streaming-amqp.git</developerConnection>
+-        <tag>HEAD</tag>
+-    </scm>
+-
+-    <distributionManagement>
+-        <repository>
+-            <id>jboss-nexus-thirdparty</id>
+-            <name>JBoss nexus</name>
+-            <url>https://repository.jboss.org/nexus/service/local/staging/deploy/maven2/</url>
+-        </repository>
+-    </distributionManagement>
+-
+     <properties>
+         <maven.compiler.source>1.8</maven.compiler.source>
+         <maven.compiler.target>1.8</maven.compiler.target>
+-        <maven-shade-plugin.version>3.1.0</maven-shade-plugin.version>
+-        <maven-surefire-plugin.version>2.20.1</maven-surefire-plugin.version>
+-        <maven-release-plugin.version>2.5.3</maven-release-plugin.version>
+-        <build-helper-maven-plugin.version>3.0.0</build-helper-maven-plugin.version>
+         <vertx-proton.version>3.2.0</vertx-proton.version>
+         <scala.version>2.11.8</scala.version>
+         <scala.binary.version>2.11</scala.binary.version>
+-        <scalatest-maven-plugin.version>1.0</scalatest-maven-plugin.version>
+         <spark.version>2.0.0</spark.version>
+         <junit.version>4.12</junit.version>
+         <scalatest.version>2.2.5</scalatest.version>
+         <junit-interface.version>0.11</junit-interface.version>
+         <activemq.version>5.13.3</activemq.version>
+-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+     </properties>
+ 
+     <dependencies>
+@@ -65,12 +46,6 @@
+             <version>${vertx-proton.version}</version>
+         </dependency>
+         <dependency>
+-            <groupId>io.vertx</groupId>
+-            <artifactId>vertx-codegen</artifactId>
+-            <version>${vertx-proton.version}</version>
+-            <scope>provided</scope>
+-        </dependency>
+-        <dependency>
+             <groupId>junit</groupId>
+             <artifactId>junit</artifactId>
+             <version>${junit.version}</version>
+@@ -108,7 +83,6 @@
+             <plugin>
+                 <groupId>org.scala-tools</groupId>
+                 <artifactId>maven-scala-plugin</artifactId>
+-                <version>${scala.binary.version}</version>
+                 <!-- Scala sources need to be compiled before Java ones (so before maven-compiler-plugin)
+                      In order to do so, the "compile" goal is tied to the "process-resources" phase so
+                      before the "compile" phase. Otherwise maven-compiler-plugin starts first -->
+@@ -134,7 +108,7 @@
+             <plugin>
+                 <groupId>org.scalatest</groupId>
+                 <artifactId>scalatest-maven-plugin</artifactId>
+-                <version>${scalatest-maven-plugin.version}</version>
++                <version>1.0</version>
+                 <configuration>
+                     <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+                     <junitxml>.</junitxml>
+@@ -154,7 +128,7 @@
+             <plugin>
+                 <groupId>org.apache.maven.plugins</groupId>
+                 <artifactId>maven-surefire-plugin</artifactId>
+-                <version>${maven-surefire-plugin.version}</version>
++                <version>2.19.1</version>
+                 <configuration>
+                     <includes>
+                         <include>**/*Suite.java</include>
+@@ -174,10 +148,6 @@
+             <plugin>
+                 <groupId>org.apache.maven.plugins</groupId>
+                 <artifactId>maven-shade-plugin</artifactId>
+-                <version>${maven-shade-plugin.version}</version>
+-                <configuration>
+-                    <createDependencyReducedPom>false</createDependencyReducedPom>
+-                </configuration>
+                 <executions>
+                     <execution>
+                         <phase>package</phase>
+@@ -192,7 +162,6 @@
+             <plugin>
+                 <groupId>org.codehaus.mojo</groupId>
+                 <artifactId>build-helper-maven-plugin</artifactId>
+-                <version>${build-helper-maven-plugin.version}</version>
+                 <executions>
+                     <execution>
+                         <id>add-test-source</id>
+@@ -209,14 +178,6 @@
+                     </execution>
+                 </executions>
+             </plugin>
+-            <plugin>
+-                <groupId>org.apache.maven.plugins</groupId>
+-                <artifactId>maven-release-plugin</artifactId>
+-                <version>${maven-release-plugin.version}</version>
+-                <configuration>
+-                    <tagNameFormat>@{project.version}</tagNameFormat>
+-                </configuration>
+-            </plugin>
+         </plugins>
+     </build>
+ 
+@@ -237,4 +198,4 @@
+     </developers>
+ 
+     
+-</project>
++</project>
+\ No newline at end of file
+diff --git a/src/main/java/io/radanalytics/streaming/amqp/JavaAMQPBodyFunction.java b/src/main/java/org/apache/spark/streaming/amqp/JavaAMQPBodyFunction.java
+similarity index 97%
+rename from src/main/java/io/radanalytics/streaming/amqp/JavaAMQPBodyFunction.java
+rename to src/main/java/org/apache/spark/streaming/amqp/JavaAMQPBodyFunction.java
+index b592053..1160601 100644
+--- a/src/main/java/io/radanalytics/streaming/amqp/JavaAMQPBodyFunction.java
++++ b/src/main/java/org/apache/spark/streaming/amqp/JavaAMQPBodyFunction.java
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp;
++package org.apache.spark.streaming.amqp;
+ 
+ import org.apache.qpid.proton.message.Message;
+ import org.apache.spark.api.java.function.Function;
+diff --git a/src/main/java/io/radanalytics/streaming/amqp/JavaAMQPJsonFunction.java b/src/main/java/org/apache/spark/streaming/amqp/JavaAMQPJsonFunction.java
+similarity index 97%
+rename from src/main/java/io/radanalytics/streaming/amqp/JavaAMQPJsonFunction.java
+rename to src/main/java/org/apache/spark/streaming/amqp/JavaAMQPJsonFunction.java
+index cdc90cc..b47e3c7 100644
+--- a/src/main/java/io/radanalytics/streaming/amqp/JavaAMQPJsonFunction.java
++++ b/src/main/java/org/apache/spark/streaming/amqp/JavaAMQPJsonFunction.java
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp;
++package org.apache.spark.streaming.amqp;
+ 
+ import org.apache.qpid.proton.message.Message;
+ import org.apache.spark.api.java.function.Function;
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/AMQPBodyFunction.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPBodyFunction.scala
+similarity index 91%
+rename from src/main/scala/io/radanalytics/streaming/amqp/AMQPBodyFunction.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/AMQPBodyFunction.scala
+index 7f8ecd8..8d6aa27 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/AMQPBodyFunction.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPBodyFunction.scala
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import org.apache.qpid.proton.amqp.messaging.{AmqpValue, Section}
+ import org.apache.qpid.proton.message.Message
+@@ -26,7 +26,7 @@ import org.apache.qpid.proton.message.Message
+   *
+   * @tparam T
+   */
+-class AMQPBodyFunction[T] extends ((Message) => Option[T]) with Serializable {
++class AMQPBodyFunction[T] extends Function1[Message, Option[T]] with Serializable {
+ 
+   override def apply(message: Message): Option[T] = {
+ 
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/AMQPFlowController.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPFlowController.scala
+similarity index 89%
+rename from src/main/scala/io/radanalytics/streaming/amqp/AMQPFlowController.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/AMQPFlowController.scala
+index 7f0fc06..65d8a3f 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/AMQPFlowController.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPFlowController.scala
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import java.lang.Long
+ import java.util.concurrent._
+@@ -23,13 +23,14 @@ import java.util.concurrent._
+ import io.vertx.core.{Handler, Vertx}
+ import io.vertx.proton.{ProtonDelivery, ProtonMessageHandler, ProtonReceiver}
+ import org.apache.qpid.proton.message.Message
+-import org.slf4j.LoggerFactory
++import org.apache.spark.internal.Logging
+ 
+ import scala.collection.mutable
+ 
+ /**
+   * Listener for events from an AMQP flow controller
+   */
++private [streaming]
+ trait AMQPFlowControllerListener {
+ 
+   /**
+@@ -47,10 +48,11 @@ trait AMQPFlowControllerListener {
+   * @param receiver       AMQP receiver instance
+   * @param listener       Listener for flow controller events
+   */
++private [streaming]
+ class AMQPFlowController(
+         receiver: ProtonReceiver,
+         listener: AMQPFlowControllerListener
+-     ) {
++     ) extends Logging {
+ 
+   protected final val CREDITS_DEFAULT = 1000
+   protected final val CREDITS_THRESHOLD = (CREDITS_DEFAULT * 50) / 100
+@@ -58,8 +60,6 @@ class AMQPFlowController(
+   protected var count = 0
+   protected var credits = 0
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   // check on the receiver and listener instances
+   if (Option(receiver).isEmpty)
+     throw new IllegalArgumentException("The receiver instance cannot be null")
+@@ -115,7 +115,7 @@ class AMQPFlowController(
+ 
+   protected def acquire(delivery: ProtonDelivery, message: Message): Unit = {
+ 
+-    log.debug(s"Process delivery tag [${ new String(delivery.getTag()) }]")
++    logDebug(s"Process delivery tag [${ new String(delivery.getTag()) }]")
+ 
+     count += 1
+     // raise the listener event in order to pass delivery and message
+@@ -134,7 +134,7 @@ class AMQPFlowController(
+     if (count >= credits - CREDITS_THRESHOLD) {
+ 
+       val creditsToIssue = count
+-      log.debug(s"Flow: count ${count} >= ${credits - CREDITS_THRESHOLD} ... issuing ${creditsToIssue} credits")
++      logDebug(s"Flow: count ${count} >= ${credits - CREDITS_THRESHOLD} ... issuing ${creditsToIssue} credits")
+       receiver.flow(creditsToIssue)
+       count = 0
+     }
+@@ -168,15 +168,13 @@ private final class AMQPAsyncFlowController(
+ 
+   var timerScheduled: Boolean = false
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   override def beforeOpen(): Unit = {
+ 
+     last = 0L
+     timerScheduled = false
+     queue.clear()
+ 
+-    log.info(s"permitsPerSecond ${permitsPerSecond}, stableIntervalMicros ${TimeUnit.MICROSECONDS.toMillis(stableIntervalMicros.toLong)}")
++    logInfo(s"permitsPerSecond ${permitsPerSecond}, stableIntervalMicros ${TimeUnit.MICROSECONDS.toMillis(stableIntervalMicros.toLong)}")
+   }
+ 
+   override def beforeClose(): Unit = {
+@@ -200,7 +198,7 @@ private final class AMQPAsyncFlowController(
+     // this message is arrived too quickly
+     } else {
+ 
+-      log.debug(s"--> Enqueue delivery tag [${ new String(delivery.getTag()) }]")
++      logDebug(s"--> Enqueue delivery tag [${ new String(delivery.getTag()) }]")
+ 
+       queue.enqueue(new Tuple2(delivery, message))
+ 
+@@ -223,7 +221,7 @@ private final class AMQPAsyncFlowController(
+       if (delay == 0)
+         delay = 1L
+ 
+-      log.debug(s"Timer scheduled every ${delay} ms")
++      logDebug(s"Timer scheduled every ${delay} ms")
+       vertx.setTimer(delay, this)
+ 
+       timerScheduled = true
+@@ -241,7 +239,7 @@ private final class AMQPAsyncFlowController(
+ 
+     val t = queue.dequeue()
+ 
+-    log.debug(s"<-- Dequeue delivery tag [${ new String(t._1.getTag()) }]")
++    logDebug(s"<-- Dequeue delivery tag [${ new String(t._1.getTag()) }]")
+ 
+     last = TimeUnit.NANOSECONDS.toMicros(System.nanoTime)
+     super.acquire(t._1, t._2)
+@@ -289,14 +287,12 @@ private final class AMQPHrAsyncFlowController(
+   private val scheduledExecutorService: ScheduledExecutorService = Executors.newScheduledThreadPool(1)
+   private var scheduled: Option[ScheduledFuture[_]] = None
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   override def beforeOpen(): Unit = {
+ 
+     last = 0L
+     queue.clear()
+ 
+-    log.info(s"permitsPerSecond ${permitsPerSecond}, stableIntervalMicros ${stableIntervalMicros}")
++    logInfo(s"permitsPerSecond ${permitsPerSecond}, stableIntervalMicros ${stableIntervalMicros}")
+   }
+ 
+   override def beforeClose(): Unit = {
+@@ -314,7 +310,7 @@ private final class AMQPHrAsyncFlowController(
+     if (queue.isEmpty && scheduled.isDefined) {
+       scheduled.get.cancel(false)
+       scheduled = None
+-      log.info(s"Timer cancelled")
++      logInfo(s"Timer cancelled")
+     }
+ 
+     // the sender rate is lower than the maximum specified,
+@@ -330,7 +326,7 @@ private final class AMQPHrAsyncFlowController(
+     // this message is arrived too quickly
+     } else {
+ 
+-      log.debug(s"--> Enqueue delivery tag [${ new String(delivery.getTag()) }]")
++      logDebug(s"--> Enqueue delivery tag [${ new String(delivery.getTag()) }]")
+ 
+       queue.put(new Tuple2(delivery, message))
+ 
+@@ -347,7 +343,7 @@ private final class AMQPHrAsyncFlowController(
+     // timer not already scheduled
+     if (scheduled.isEmpty) {
+ 
+-      log.debug(s"Timer scheduled every ${stableIntervalMicros.toLong} us")
++      logDebug(s"Timer scheduled every ${stableIntervalMicros.toLong} us")
+       scheduled = Option(scheduledExecutorService.scheduleWithFixedDelay(this, stableIntervalMicros.toLong, stableIntervalMicros.toLong, TimeUnit.MICROSECONDS))
+     }
+   }
+@@ -361,7 +357,7 @@ private final class AMQPHrAsyncFlowController(
+ 
+       val t = queue.take()
+ 
+-      log.debug(s"<-- Dequeue delivery tag [${new String(t._1.getTag())}]")
++      logDebug(s"<-- Dequeue delivery tag [${new String(t._1.getTag())}]")
+ 
+       last = TimeUnit.NANOSECONDS.toMicros(System.nanoTime)
+       super.acquire(t._1, t._2)
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/AMQPInputDStream.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPInputDStream.scala
+similarity index 79%
+rename from src/main/scala/io/radanalytics/streaming/amqp/AMQPInputDStream.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/AMQPInputDStream.scala
+index c1dc7e2..0a30089 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/AMQPInputDStream.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPInputDStream.scala
+@@ -15,12 +15,11 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import org.apache.qpid.proton.message.Message
+ import org.apache.spark.storage.StorageLevel
+ import org.apache.spark.streaming.StreamingContext
+-import org.apache.spark.streaming.amqp.ReliableAMQPReceiver
+ import org.apache.spark.streaming.dstream.ReceiverInputDStream
+ import org.apache.spark.streaming.receiver.Receiver
+ 
+@@ -31,18 +30,15 @@ import scala.reflect.ClassTag
+  * @param ssc						    Spark Streaming context
+  * @param host					    AMQP container hostname or IP address to connect
+  * @param port					    AMQP container port to connect
+- * @param username          Username for SASL PLAIN authentication
+- * @param password          Password for SASL PLAIN authentication
+  * @param address				    AMQP node address on which receive messages
+  * @param messageConverter  Callback for converting AMQP message to custom type at application level
+  * @param storageLevel	    RDD storage level
+  */
++private[streaming]
+ class AMQPInputDStream[T: ClassTag](
+       ssc: StreamingContext,
+       host: String,
+       port: Int,
+-      username: Option[String],
+-      password: Option[String],
+       address: String,
+       messageConverter: Message => Option[T],
+       useReliableReceiver: Boolean,
+@@ -52,9 +48,9 @@ class AMQPInputDStream[T: ClassTag](
+   def getReceiver(): Receiver[T] = {
+ 
+     if (!useReliableReceiver) {
+-      new AMQPReceiver(host, port, username, password, address, messageConverter, storageLevel)
++      new AMQPReceiver(host, port, address, messageConverter, storageLevel)
+     } else {
+-      new ReliableAMQPReceiver(host, port, username, password, address, messageConverter, storageLevel)
++      new ReliableAMQPReceiver(host, port, address, messageConverter, storageLevel)
+     }
+   }
+ }
+\ No newline at end of file
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/AMQPJsonFunction.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPJsonFunction.scala
+similarity index 99%
+rename from src/main/scala/io/radanalytics/streaming/amqp/AMQPJsonFunction.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/AMQPJsonFunction.scala
+index da02525..2cd3dca 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/AMQPJsonFunction.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPJsonFunction.scala
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import java.util.{Base64, List, Map}
+ 
+diff --git a/src/main/scala/org/apache/spark/streaming/amqp/AMQPRateController.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPRateController.scala
+index 2f9a0d1..65c4300 100644
+--- a/src/main/scala/org/apache/spark/streaming/amqp/AMQPRateController.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPRateController.scala
+@@ -26,8 +26,8 @@ import org.apache.qpid.proton.amqp.{Symbol => AmqpSymbol}
+ import org.apache.qpid.proton.amqp.messaging.Rejected
+ import org.apache.qpid.proton.amqp.transport.ErrorCondition
+ import org.apache.qpid.proton.message.Message
+-import org.apache.spark.streaming.receiver.BlockGenerator 
+-import org.slf4j.LoggerFactory
++import org.apache.spark.internal.Logging
++import org.apache.spark.streaming.receiver.BlockGenerator
+ 
+ /**
+   * Provides message rate control with related throttling
+@@ -38,7 +38,7 @@ import org.slf4j.LoggerFactory
+ abstract class AMQPRateController(
+        blockGenerator: BlockGenerator,
+        receiver: ProtonReceiver
+-      ) {
++      ) extends Logging {
+ 
+   // check on the receiver and block generator instances
+   if (Option(receiver).isEmpty)
+@@ -64,8 +64,6 @@ abstract class AMQPRateController(
+   private var scheduledThrottlingHealthy: ScheduledFuture[_] = _
+   private val throttlingHealthy: ThrottlingHealthy = new ThrottlingHealthy()
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   /**
+     * Open/start the rate controller activity
+     */
+@@ -117,7 +115,7 @@ abstract class AMQPRateController(
+       if (rateLimiter.tryAcquire()) {
+ 
+         if (throttling) {
+-          log.info("Throttling ended ... ")
++          logInfo("Throttling ended ... ")
+           throttling = false
+           onThrottlingEnded()
+ 
+@@ -135,7 +133,7 @@ abstract class AMQPRateController(
+           // throttling start now
+           throttling = true
+           onThrottlingStarted()
+-          log.warn("Throttling started ... ")
++          logWarning("Throttling started ... ")
+ 
+           // starting throttling healthy thread in order to end throttling
+           // when no more messages are received (silence from sender)
+@@ -144,7 +142,7 @@ abstract class AMQPRateController(
+ 
+         if (throttling) {
+ 
+-          log.error("Throttling ... ")
++          logError("Throttling ... ")
+           // already in throttling
+           onThrottling(delivery, message)
+         }
+@@ -187,7 +185,7 @@ abstract class AMQPRateController(
+ 
+         if (throttling) {
+ 
+-          log.info("Healthy: Throttling ended ... ")
++          logInfo("Healthy: Throttling ended ... ")
+           throttling = false
+           onThrottlingEnded()
+         }
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/AMQPReceiver.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPReceiver.scala
+similarity index 84%
+rename from src/main/scala/io/radanalytics/streaming/amqp/AMQPReceiver.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/AMQPReceiver.scala
+index 52f9978..2697d57 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/AMQPReceiver.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPReceiver.scala
+@@ -15,35 +15,32 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import io.vertx.core.{AsyncResult, Context, Handler, Vertx}
+ import io.vertx.proton.{ProtonClient, ProtonClientOptions, ProtonConnection, ProtonDelivery}
+ import org.apache.qpid.proton.message.Message
++import org.apache.spark.internal.Logging
+ import org.apache.spark.storage.StorageLevel
+ import org.apache.spark.streaming.receiver.Receiver
+-import org.slf4j.LoggerFactory
+ 
+ /**
+   * Receiver for getting messages from an AMQP sender node
+   *
+   * @param host             AMQP container hostname or IP address to connect
+   * @param port             AMQP container port to connect
+-  * @param username         Username for SASL PLAIN authentication
+-  * @param password         Password for SASL PLAIN authentication
+   * @param address          AMQP node address on which receive messages
+   * @param messageConverter Callback for converting AMQP message to custom type at application level
+   * @param storageLevel	    RDD storage level
+   */
++private [streaming]
+ class AMQPReceiver[T](
+        host: String,
+        port: Int,
+-       username: Option[String],
+-       password: Option[String],
+        address: String,
+        messageConverter: Message => Option[T],
+        storageLevel: StorageLevel
+-     ) extends Receiver[T](storageLevel) with AMQPFlowControllerListener {
++     ) extends Receiver[T](storageLevel) with Logging with AMQPFlowControllerListener {
+ 
+   protected var flowController: AMQPFlowController = _
+ 
+@@ -54,11 +51,9 @@ class AMQPReceiver[T](
+ 
+   protected var connection: ProtonConnection = _
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   override def onStart(): Unit = {
+ 
+-    log.info("onStart")
++    logInfo("onStart")
+ 
+     vertx = Vertx.vertx()
+ 
+@@ -67,15 +62,7 @@ class AMQPReceiver[T](
+ 
+     client = ProtonClient.create(vertx)
+ 
+-    val protonUsername = username match {
+-      case Some(u) => u
+-      case None => null
+-    }
+-    val protonPassword = password match {
+-      case Some(p) => p
+-      case None => null
+-    }
+-    client.connect(options, host, port, protonUsername, protonPassword, new Handler[AsyncResult[ProtonConnection]] {
++    client.connect(options, host, port, new Handler[AsyncResult[ProtonConnection]] {
+       override def handle(ar: AsyncResult[ProtonConnection]): Unit = {
+ 
+         if (ar.succeeded()) {
+@@ -84,7 +71,6 @@ class AMQPReceiver[T](
+           context = vertx.getOrCreateContext()
+ 
+           connection = ar.result()
+-          log.info(s"AMQP connection established with ${host}:${port}");
+           processConnection(connection)
+ 
+         } else {
+@@ -98,7 +84,7 @@ class AMQPReceiver[T](
+ 
+   override def onStop(): Unit = {
+ 
+-    log.info("onStop")
++    logInfo("onStop")
+ 
+     if (Option(connection).isDefined) {
+       connection.close()
+diff --git a/src/main/scala/org/apache/spark/streaming/amqp/AMQPUtils.scala b/src/main/scala/org/apache/spark/streaming/amqp/AMQPUtils.scala
+index e773c63..e7b41dd 100644
+--- a/src/main/scala/org/apache/spark/streaming/amqp/AMQPUtils.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/AMQPUtils.scala
+@@ -17,7 +17,6 @@
+ 
+ package org.apache.spark.streaming.amqp
+ 
+-import io.radanalytics.streaming.amqp.{AMQPBodyFunction, AMQPInputDStream, JavaAMQPJsonFunction}
+ import org.apache.qpid.proton.message.Message
+ import org.apache.spark.api.java.function.Function
+ import org.apache.spark.storage.StorageLevel
+@@ -36,8 +35,6 @@ object AMQPUtils {
+     * @param ssc              Spark Streaming context
+     * @param host             AMQP container hostname or IP address to connect
+     * @param port             AMQP container port to connect
+-    * @param username         Username for SASL PLAIN authentication
+-    * @param password         Password for SASL PLAIN authentication
+     * @param address          AMQP node address on which receive messages
+     * @param messageConverter Callback for converting AMQP message to custom type at application level
+     * @param storageLevel     RDD storage level
+@@ -46,14 +43,12 @@ object AMQPUtils {
+        ssc: StreamingContext,
+        host: String,
+        port: Int,
+-       username: Option[String],
+-       password: Option[String],
+        address: String,
+        messageConverter: Message => Option[T],
+        storageLevel: StorageLevel
+      ): ReceiverInputDStream[T] = {
+     val walEnabled = WriteAheadLogUtils.enableReceiverLog(ssc.conf)
+-    new AMQPInputDStream(ssc, host, port, username, password, address, messageConverter, walEnabled, storageLevel)
++    new AMQPInputDStream(ssc, host, port, address, messageConverter, walEnabled, storageLevel)
+   }
+ 
+   /**
+@@ -62,8 +57,6 @@ object AMQPUtils {
+     * @param ssc     Spark Streaming context
+     * @param host    AMQP container hostname or IP address to connect
+     * @param port    AMQP container port to connect
+-    * @param username Username for SASL PLAIN authentication
+-    * @param password Password for SASL PLAIN authentication
+     * @param address AMQP node address on which receive messages
+     * @note Default message converter try to convert the AMQP message body into the custom type T
+     */
+@@ -71,11 +64,9 @@ object AMQPUtils {
+        ssc: StreamingContext,
+        host: String,
+        port: Int,
+-       username: Option[String],
+-       password: Option[String],
+        address: String
+      ): ReceiverInputDStream[T] = {
+-    createStream(ssc, host, port, username, password, address, new AMQPBodyFunction[T], StorageLevel.MEMORY_ONLY)
++    createStream(ssc, host, port, address, new AMQPBodyFunction[T], StorageLevel.MEMORY_ONLY)
+   }
+ 
+   /**
+@@ -84,8 +75,6 @@ object AMQPUtils {
+     * @param jssc             Java Spark Streaming context
+     * @param host             AMQP container hostname or IP address to connect
+     * @param port             AMQP container port to connect
+-    * @param username         Username for SASL PLAIN authentication
+-    * @param password         Password for SASL PLAIN authentication
+     * @param address          AMQP node address on which receive messages
+     * @param messageConverter Callback for converting AMQP message to custom type at application level
+     * @param storageLevel     RDD storage level
+@@ -95,8 +84,6 @@ object AMQPUtils {
+        jssc: JavaStreamingContext,
+        host: String,
+        port: Int,
+-       username: Option[String],
+-       password: Option[String],
+        address: String,
+        messageConverter: Function[Message, Option[T]],
+        storageLevel: StorageLevel
+@@ -108,7 +95,7 @@ object AMQPUtils {
+ 
+     val walEnabled = WriteAheadLogUtils.enableReceiverLog(jssc.ssc.conf)
+ 
+-    new AMQPInputDStream(jssc.ssc, host, port, username, password, address, fn, walEnabled, storageLevel)
++    new AMQPInputDStream(jssc.ssc, host, port, address, fn, walEnabled, storageLevel)
+   }
+ 
+   /**
+@@ -117,8 +104,6 @@ object AMQPUtils {
+     * @param jssc    Java Spark Streaming context
+     * @param host    AMQP container hostname or IP address to connect
+     * @param port    AMQP container port to connect
+-    * @param username Username for SASL PLAIN authentication
+-    * @param password Password for SASL PLAIN authentication
+     * @param address AMQP node address on which receive messages
+     * @note Default message converter try to convert the AMQP message body into the JSON string representation
+     */
+@@ -126,15 +111,13 @@ object AMQPUtils {
+        jssc: JavaStreamingContext,
+        host: String,
+        port: Int,
+-       username: Option[String],
+-       password: Option[String],
+        address: String
+      ): JavaReceiverInputDStream[String] = {
+ 
+     // define the default message converted
+     val messageConverter: Function[Message, Option[String]] = new JavaAMQPJsonFunction()
+ 
+-    createStream(jssc, host, port, username, password, address, messageConverter, StorageLevel.MEMORY_ONLY)
++    createStream(jssc, host, port, address, messageConverter, StorageLevel.MEMORY_ONLY)
+   }
+ }
+ 
+@@ -149,11 +132,9 @@ class AMQPUtilsPythonHelper {
+        jssc: JavaStreamingContext,
+        host: String,
+        port: Int,
+-       username: String,
+-       password: String,
+        address: String
+      ): JavaDStream[String] = {
+-    
+-    AMQPUtils.createStream(jssc, host, port, Option(username), Option(password), address)
++
++    AMQPUtils.createStream(jssc, host, port, address)
+   }
+ }
+diff --git a/src/main/scala/org/apache/spark/streaming/amqp/ReliableAMQPReceiver.scala b/src/main/scala/org/apache/spark/streaming/amqp/ReliableAMQPReceiver.scala
+index a886eb8..fe0d524 100644
+--- a/src/main/scala/org/apache/spark/streaming/amqp/ReliableAMQPReceiver.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/ReliableAMQPReceiver.scala
+@@ -19,14 +19,13 @@ package org.apache.spark.streaming.amqp
+ 
+ import java.util.concurrent.ConcurrentHashMap
+ 
+-import io.radanalytics.streaming.amqp.{AMQPFlowControllerListener, AMQPReceiver}
+-import io.vertx.core.Handler
++import io.vertx.core.{AsyncResult, Context, Handler, Vertx}
+ import io.vertx.proton._
+ import org.apache.qpid.proton.amqp.messaging.Accepted
+ import org.apache.qpid.proton.message.Message
++import org.apache.spark.internal.Logging
+ import org.apache.spark.storage.{StorageLevel, StreamBlockId}
+-import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener}
+-import org.slf4j.LoggerFactory
++import org.apache.spark.streaming.receiver.{BlockGenerator, BlockGeneratorListener, Receiver}
+ 
+ import scala.collection.mutable
+ 
+@@ -35,22 +34,19 @@ import scala.collection.mutable
+  *
+  * @param host					    AMQP container hostname or IP address to connect
+  * @param port					    AMQP container port to connect
+- * @param username          Username for SASL PLAIN authentication
+- * @param password          Password for SASL PLAIN authentication
+  * @param address				    AMQP node address on which receive messages
+  * @param messageConverter  Callback for converting AMQP message to custom type at application level
+  * @param storageLevel	    RDD storage level
+  */
++private[streaming]
+ class ReliableAMQPReceiver[T](
+       host: String,
+       port: Int,
+-      username: Option[String],
+-      password: Option[String],
+       address: String,
+       messageConverter: Message => Option[T],
+       storageLevel: StorageLevel
+-    ) extends AMQPReceiver[T](host, port, username, password, address, messageConverter, storageLevel)
+-      with AMQPFlowControllerListener {
++    ) extends AMQPReceiver[T](host, port, address, messageConverter, storageLevel)
++      with Logging with AMQPFlowControllerListener {
+ 
+   private final val MaxStoreAttempts = 3
+ 
+@@ -60,8 +56,6 @@ class ReliableAMQPReceiver[T](
+ 
+   private var blockDeliveryMap: ConcurrentHashMap[StreamBlockId, Array[ProtonDelivery]] = _
+ 
+-  private val log = LoggerFactory.getLogger(getClass)
+-
+   override def onStart() {
+ 
+     deliveryBuffer = new mutable.ArrayBuffer[ProtonDelivery]()
+@@ -90,7 +84,7 @@ class ReliableAMQPReceiver[T](
+ 
+     def onAddData(data: Any, metadata: Any): Unit = {
+ 
+-      log.debug(data.toString())
++      logDebug(data.toString())
+ 
+       if (Option(metadata).isDefined) {
+ 
+@@ -160,7 +154,7 @@ class ReliableAMQPReceiver[T](
+ 
+         } else {
+ 
+-          log.error(exception.get.getMessage(), exception.get)
++          logError(exception.get.getMessage(), exception.get)
+           stop("Error while storing block into Spark", exception.get)
+         }
+       }
+@@ -169,7 +163,7 @@ class ReliableAMQPReceiver[T](
+     }
+ 
+     def onError(message: String, throwable: Throwable): Unit = {
+-      log.error(message, throwable)
++      logError(message, throwable)
+       reportError(message, throwable)
+     }
+   }
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/package-info.java b/src/main/scala/org/apache/spark/streaming/amqp/package-info.java
+similarity index 95%
+rename from src/main/scala/io/radanalytics/streaming/amqp/package-info.java
+rename to src/main/scala/org/apache/spark/streaming/amqp/package-info.java
+index 4dd6172..09cc947 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/package-info.java
++++ b/src/main/scala/org/apache/spark/streaming/amqp/package-info.java
+@@ -18,4 +18,4 @@
+ /**
+  * AMQP receiver for Spark Streaming.
+  */
+-package io.radanalytics.streaming.amqp;
+\ No newline at end of file
++package org.apache.spark.streaming.amqp;
+\ No newline at end of file
+diff --git a/src/main/scala/io/radanalytics/streaming/amqp/package.scala b/src/main/scala/org/apache/spark/streaming/amqp/package.scala
+similarity index 96%
+rename from src/main/scala/io/radanalytics/streaming/amqp/package.scala
+rename to src/main/scala/org/apache/spark/streaming/amqp/package.scala
+index 4d18d45..2c3d6f1 100644
+--- a/src/main/scala/io/radanalytics/streaming/amqp/package.scala
++++ b/src/main/scala/org/apache/spark/streaming/amqp/package.scala
+@@ -16,7 +16,7 @@
+  */
+ 
+ 
+-package io.radanalytics.streaming
++package org.apache.spark.streaming
+ 
+ /**
+   * AMQP receiver for Spark Streaming.
+diff --git a/src/test/java/io/radanalytics/streaming/amqp/JavaAMQPServerStreamSuite.java b/src/test/java/io/radanalytics/streaming/amqp/JavaAMQPServerStreamSuite.java
+deleted file mode 100644
+index cfb435b..0000000
+--- a/src/test/java/io/radanalytics/streaming/amqp/JavaAMQPServerStreamSuite.java
++++ /dev/null
+@@ -1,116 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *    http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package io.radanalytics.streaming.amqp;
+-
+-import org.apache.qpid.proton.message.Message;
+-import org.apache.spark.SparkConf;
+-import org.apache.spark.api.java.function.Function;
+-import org.apache.spark.storage.StorageLevel;
+-import org.apache.spark.streaming.amqp.AMQPUtils;
+-import org.apache.spark.streaming.Duration;
+-import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
+-import org.apache.spark.streaming.api.java.JavaStreamingContext;
+-import org.junit.After;
+-import org.junit.Before;
+-import org.junit.Test;
+-import scala.Option;
+-
+-import java.util.ArrayList;
+-import java.util.List;
+-
+-/**
+- * Java test suite for the AMQP input stream
+- */
+-public class JavaAMQPServerStreamSuite {
+-
+-    private Duration batchDuration = new Duration(1000);
+-    private String master = "local[2]";
+-    private String appName = this.getClass().getSimpleName();
+-    private String address = "my_address";
+-    private String checkpointDir = "/tmp/spark-streaming-amqp-tests";
+-
+-    private SparkConf conf = null;
+-    private JavaStreamingContext jssc = null;
+-    private AMQPTestUtils amqpTestUtils = null;
+-
+-    @Before
+-    public void setup() {
+-
+-        this.conf = new SparkConf().setMaster(this.master).setAppName(this.appName);
+-        conf.set("spark.streaming.receiver.writeAheadLog.enable", "true");
+-        this.jssc = new JavaStreamingContext(this.conf, this.batchDuration);
+-        this.jssc.checkpoint(checkpointDir);
+-
+-        this.amqpTestUtils = new AMQPTestUtils();
+-        this.amqpTestUtils.setup();
+-    }
+-
+-    @After
+-    public void teardown() {
+-
+-        if (this.jssc != null) {
+-            this.jssc.stop();
+-        }
+-
+-        if (this.amqpTestUtils != null) {
+-            this.amqpTestUtils.teardown();
+-        }
+-    }
+-
+-    @Test
+-    public void testAMQPReceiveServer() {
+-
+-        String sendMessage = "Spark Streaming & AMQP";
+-        int max = 10;
+-        long delay = 100;
+-
+-        this.amqpTestUtils.startAMQPServer(sendMessage, max, delay);
+-
+-        Function<Message, Option<String>> converter = new JavaAMQPBodyFunction<>();
+-
+-        JavaReceiverInputDStream<String>  receiveStream =
+-                AMQPUtils.createStream(this.jssc,
+-                        this.amqpTestUtils.host(),
+-                        this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+-                        this.address, converter, StorageLevel.MEMORY_ONLY());
+-
+-        List<String> receivedMessage = new ArrayList<>();
+-        receiveStream.foreachRDD(rdd -> {
+-            if (!rdd.isEmpty()) {
+-                receivedMessage.addAll(rdd.collect());
+-            }
+-        });
+-
+-        jssc.start();
+-
+-        try {
+-            Thread.sleep(10000);
+-        } catch (InterruptedException e) {
+-            e.printStackTrace();
+-        }
+-
+-        assert(receivedMessage.size() == max);
+-
+-        jssc.stop();
+-
+-        amqpTestUtils.stopAMQPServer();
+-    }
+-
+-}
+diff --git a/src/test/java/io/radanalytics/streaming/amqp/JavaAMQPBrokerStreamSuite.java b/src/test/java/org/apache/spark/streaming/amqp/JavaAMQPStreamSuite.java
+similarity index 81%
+rename from src/test/java/io/radanalytics/streaming/amqp/JavaAMQPBrokerStreamSuite.java
+rename to src/test/java/org/apache/spark/streaming/amqp/JavaAMQPStreamSuite.java
+index 0dda10c..8685a29 100644
+--- a/src/test/java/io/radanalytics/streaming/amqp/JavaAMQPBrokerStreamSuite.java
++++ b/src/test/java/org/apache/spark/streaming/amqp/JavaAMQPStreamSuite.java
+@@ -15,16 +15,14 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp;
++package org.apache.spark.streaming.amqp;
+ 
+ import com.fasterxml.jackson.databind.JsonNode;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import org.apache.commons.lang3.StringUtils;
+-import org.apache.qpid.proton.message.Message;
+ import org.apache.spark.SparkConf;
+ import org.apache.spark.api.java.function.Function;
+ import org.apache.spark.storage.StorageLevel;
+-import org.apache.spark.streaming.amqp.AMQPUtils;
+ import org.apache.spark.streaming.Duration;
+ import org.apache.spark.streaming.api.java.JavaDStream;
+ import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
+@@ -32,7 +30,6 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
+ import org.junit.After;
+ import org.junit.Before;
+ import org.junit.Test;
+-import scala.Option;
+ 
+ import java.util.*;
+ import java.util.Map.Entry;
+@@ -40,7 +37,7 @@ import java.util.Map.Entry;
+ /**
+  * Java test suite for the AMQP input stream
+  */
+-public class JavaAMQPBrokerStreamSuite {
++public class JavaAMQPStreamSuite {
+ 
+     private Duration batchDuration = new Duration(1000);
+     private String master = "local[2]";
+@@ -62,15 +59,11 @@ public class JavaAMQPBrokerStreamSuite {
+ 
+         this.amqpTestUtils = new AMQPTestUtils();
+         this.amqpTestUtils.setup();
+-
+-        this.amqpTestUtils.startBroker();
+     }
+ 
+     @After
+     public void teardown() {
+ 
+-        this.amqpTestUtils.stopBroker();
+-
+         if (this.jssc != null) {
+             this.jssc.stop();
+         }
+@@ -83,15 +76,15 @@ public class JavaAMQPBrokerStreamSuite {
+     @Test
+     public void testAMQPReceiveSimpleBodyString() {
+ 
+-        Function<Message, Option<String>> converter = new JavaAMQPBodyFunction<>();
++        this.amqpTestUtils.startBroker();
++
++        Function converter = new JavaAMQPBodyFunction<String>();
+ 
+         String sendMessage = "Spark Streaming & AMQP";
+         JavaReceiverInputDStream<String>  receiveStream =
+                 AMQPUtils.createStream(this.jssc,
+                         this.amqpTestUtils.host(),
+                         this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+                         this.address, converter, StorageLevel.MEMORY_ONLY());
+ 
+         List<String> receivedMessage = new ArrayList<>();
+@@ -106,7 +99,7 @@ public class JavaAMQPBrokerStreamSuite {
+         this.amqpTestUtils.sendSimpleMessage(address, sendMessage);
+ 
+         try {
+-            Thread.sleep(5000);
++            Thread.sleep(2000);
+         } catch (InterruptedException e) {
+             e.printStackTrace();
+         }
+@@ -114,12 +107,16 @@ public class JavaAMQPBrokerStreamSuite {
+         assert(receivedMessage.get(0).equals(sendMessage));
+ 
+         jssc.stop();
++
++        this.amqpTestUtils.stopBroker();
+     }
+ 
+     @Test
+     public void testAMQPReceiveListBody() {
+ 
+-        Function<Message, Option<String>> converter = new JavaAMQPJsonFunction();
++        this.amqpTestUtils.startBroker();
++
++        Function converter = new JavaAMQPJsonFunction();
+ 
+         List<Object> list = new ArrayList<>();
+         list.add("a string");
+@@ -130,8 +127,6 @@ public class JavaAMQPBrokerStreamSuite {
+                 AMQPUtils.createStream(this.jssc,
+                         this.amqpTestUtils.host(),
+                         this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+                         this.address, converter, StorageLevel.MEMORY_ONLY());
+ 
+         JavaDStream<String> listStream = receiveStream.map(jsonMsg -> {
+@@ -140,7 +135,7 @@ public class JavaAMQPBrokerStreamSuite {
+ 
+             List<String> listFinal = new ArrayList<>();
+ 
+-            // get an iterator on "section" that is actually an array
++            // get an itarator on "section" that is actually an array
+             Iterator<JsonNode> iterator = mapper.readTree(jsonMsg).get("body").get("section").elements();
+             while(iterator.hasNext()) {
+                 listFinal.add(iterator.next().asText());
+@@ -161,7 +156,7 @@ public class JavaAMQPBrokerStreamSuite {
+         this.amqpTestUtils.sendComplexMessage(address, list);
+ 
+         try {
+-            Thread.sleep(5000);
++            Thread.sleep(2000);
+         } catch (InterruptedException e) {
+             e.printStackTrace();
+         }
+@@ -169,12 +164,17 @@ public class JavaAMQPBrokerStreamSuite {
+         assert(receivedMessage.get(0).equals(StringUtils.join(list, ',')));
+ 
+         jssc.stop();
++
++        this.amqpTestUtils.stopBroker();
++
+     }
+ 
+     @Test
+     public void testAMQPReceiveMapBody() {
+ 
+-        Function<Message, Option<String>> converter = new JavaAMQPJsonFunction();
++        this.amqpTestUtils.startBroker();
++
++        Function converter = new JavaAMQPJsonFunction();
+ 
+         Map<Object, Object> map = new HashMap<>();
+         map.put("field_a", "a string");
+@@ -184,8 +184,6 @@ public class JavaAMQPBrokerStreamSuite {
+                 AMQPUtils.createStream(this.jssc,
+                         this.amqpTestUtils.host(),
+                         this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+                         this.address, converter, StorageLevel.MEMORY_ONLY());
+ 
+         JavaDStream<String> mapStream = receiveStream.map(jsonMsg -> {
+@@ -194,7 +192,7 @@ public class JavaAMQPBrokerStreamSuite {
+ 
+             List<String> listFinal = new ArrayList<>();
+ 
+-            // get an iterator on all fields of "section" that is actually a map
++            // get an itarator on all fields of "section" that is actually a map
+             Iterator<Entry<String, JsonNode>> iterator = mapper.readTree(jsonMsg).get("body").get("section").fields();
+             while(iterator.hasNext()) {
+                 Entry<String, JsonNode> entry = iterator.next();
+@@ -216,7 +214,7 @@ public class JavaAMQPBrokerStreamSuite {
+         this.amqpTestUtils.sendComplexMessage(address, map);
+ 
+         try {
+-            Thread.sleep(5000);
++            Thread.sleep(2000);
+         } catch (InterruptedException e) {
+             e.printStackTrace();
+         }
+@@ -230,12 +228,17 @@ public class JavaAMQPBrokerStreamSuite {
+         assert(receivedMessage.get(0).equals(sbuilder.toString()));
+ 
+         jssc.stop();
++
++        this.amqpTestUtils.stopBroker();
++
+     }
+ 
+     @Test
+     public void testAMQPReceiveArrayBody() {
+ 
+-        Function<Message, Option<String>> converter = new JavaAMQPJsonFunction();
++        this.amqpTestUtils.startBroker();
++
++        Function converter = new JavaAMQPJsonFunction();
+ 
+         Object[] array = { 1, 2 };
+ 
+@@ -243,8 +246,6 @@ public class JavaAMQPBrokerStreamSuite {
+                 AMQPUtils.createStream(this.jssc,
+                         this.amqpTestUtils.host(),
+                         this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+                         this.address, converter, StorageLevel.MEMORY_ONLY());
+ 
+         JavaDStream<String> listStream = receiveStream.map(jsonMsg -> {
+@@ -253,7 +254,7 @@ public class JavaAMQPBrokerStreamSuite {
+ 
+             List<String> listFinal = new ArrayList<>();
+ 
+-            // get an iterator on "section" that is actually an array
++            // get an itarator on "section" that is actually an array
+             Iterator<JsonNode> iterator = mapper.readTree(jsonMsg).get("body").get("section").elements();
+             while(iterator.hasNext()) {
+                 listFinal.add(iterator.next().asText());
+@@ -274,7 +275,7 @@ public class JavaAMQPBrokerStreamSuite {
+         this.amqpTestUtils.sendComplexMessage(address, array);
+ 
+         try {
+-            Thread.sleep(5000);
++            Thread.sleep(2000);
+         } catch (InterruptedException e) {
+             e.printStackTrace();
+         }
+@@ -282,20 +283,23 @@ public class JavaAMQPBrokerStreamSuite {
+         assert(receivedMessage.get(0).equals(StringUtils.join(array, ',')));
+ 
+         jssc.stop();
++
++        this.amqpTestUtils.stopBroker();
++
+     }
+ 
+     @Test
+     public void testAMQPReceiveBinaryBody() {
+ 
+-        Function<Message, Option<String>> converter = new JavaAMQPJsonFunction();
++        this.amqpTestUtils.startBroker();
++
++        Function converter = new JavaAMQPJsonFunction();
+ 
+         String sendMessage = "Spark Streaming & AMQP";
+         JavaReceiverInputDStream<String>  receiveStream =
+                 AMQPUtils.createStream(this.jssc,
+                         this.amqpTestUtils.host(),
+                         this.amqpTestUtils.port(),
+-                        this.amqpTestUtils.username(),
+-                        this.amqpTestUtils.password(),
+                         this.address, converter, StorageLevel.MEMORY_ONLY());
+ 
+         JavaDStream<String> binaryStream = receiveStream.map(jsonMsg -> {
+@@ -319,7 +323,7 @@ public class JavaAMQPBrokerStreamSuite {
+         this.amqpTestUtils.sendBinaryMessage(address, sendMessage.getBytes());
+ 
+         try {
+-            Thread.sleep(5000);
++            Thread.sleep(2000);
+         } catch (InterruptedException e) {
+             e.printStackTrace();
+         }
+@@ -327,6 +331,46 @@ public class JavaAMQPBrokerStreamSuite {
+         assert(receivedMessage.get(0).equals(sendMessage));
+ 
+         jssc.stop();
++
++        this.amqpTestUtils.stopBroker();
+     }
+ 
++    @Test
++    public void testAMQPReceiveServer() {
++
++        String sendMessage = "Spark Streaming & AMQP";
++        int max = 10;
++        long delay = 100;
++
++        this.amqpTestUtils.startAMQPServer(sendMessage, max, delay);
++
++        Function converter = new JavaAMQPBodyFunction<String>();
++
++        JavaReceiverInputDStream<String>  receiveStream =
++                AMQPUtils.createStream(this.jssc,
++                        this.amqpTestUtils.host(),
++                        this.amqpTestUtils.port(),
++                        this.address, converter, StorageLevel.MEMORY_ONLY());
++
++        List<String> receivedMessage = new ArrayList<>();
++        receiveStream.foreachRDD(rdd -> {
++            if (!rdd.isEmpty()) {
++                receivedMessage.addAll(rdd.collect());
++            }
++        });
++
++        jssc.start();
++
++        try {
++            Thread.sleep(10000);
++        } catch (InterruptedException e) {
++            e.printStackTrace();
++        }
++
++        assert(receivedMessage.size() == max);
++
++        jssc.stop();
++
++        amqpTestUtils.stopAMQPServer();
++    }
+ }
+diff --git a/src/test/scala/io/radanalytics/streaming/amqp/AMQPServerStreamSuite.scala b/src/test/scala/io/radanalytics/streaming/amqp/AMQPServerStreamSuite.scala
+deleted file mode 100644
+index cd14456..0000000
+--- a/src/test/scala/io/radanalytics/streaming/amqp/AMQPServerStreamSuite.scala
++++ /dev/null
+@@ -1,97 +0,0 @@
+-/*
+- * Licensed to the Apache Software Foundation (ASF) under one or more
+- * contributor license agreements.  See the NOTICE file distributed with
+- * this work for additional information regarding copyright ownership.
+- * The ASF licenses this file to You under the Apache License, Version 2.0
+- * (the "License"); you may not use this file except in compliance with
+- * the License.  You may obtain a copy of the License at
+- *
+- *    http://www.apache.org/licenses/LICENSE-2.0
+- *
+- * Unless required by applicable law or agreed to in writing, software
+- * distributed under the License is distributed on an "AS IS" BASIS,
+- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+- * See the License for the specific language governing permissions and
+- * limitations under the License.
+- */
+-
+-package io.radanalytics.streaming.amqp
+-
+-import org.apache.spark.storage.StorageLevel
+-import org.apache.spark.streaming.amqp.AMQPUtils
+-import org.apache.spark.streaming.{Duration, Seconds, StreamingContext}
+-import org.apache.spark.{SparkConf, SparkFunSuite}
+-import org.scalatest.BeforeAndAfter
+-import org.scalatest.concurrent.Eventually
+-
+-import scala.concurrent.duration._
+-
+-/**
+- * Scala test suite for the AMQP input stream
+- */
+-class AMQPServerStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
+-  
+-  private val batchDuration: Duration = Seconds(1)
+-  private val master: String = "local[2]"
+-  private val appName: String = this.getClass().getSimpleName()
+-  private val address: String = "my_address"
+-  private val checkpointDir: String = "/tmp/spark-streaming-amqp-tests"
+-  
+-  private var conf: SparkConf = _
+-  private var ssc: StreamingContext = _
+-  private var amqpTestUtils: AMQPTestUtils = _
+-
+-  before {
+-    
+-    conf = new SparkConf().setMaster(master).setAppName(appName)
+-    conf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
+-    ssc = new StreamingContext(conf, batchDuration)
+-    ssc.checkpoint(checkpointDir)
+-    
+-    amqpTestUtils = new AMQPTestUtils()
+-    amqpTestUtils.setup()
+-  }
+-  
+-  after {
+-
+-    if (ssc != null) {
+-      ssc.stop()
+-    }
+-
+-    if (amqpTestUtils != null) {
+-      amqpTestUtils.teardown()
+-    }
+-  }
+-
+-  test("AMQP receive server") {
+-
+-    val sendMessage = "Spark Streaming & AMQP"
+-    val max = 10
+-    val delay = 100l
+-
+-    amqpTestUtils.startAMQPServer(sendMessage, max, delay)
+-
+-    val converter = new AMQPBodyFunction[String]
+-
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
+-
+-    var receivedMessage: List[String] = List()
+-    receiveStream.foreachRDD(rdd => {
+-      if (!rdd.isEmpty()) {
+-        receivedMessage = receivedMessage ::: rdd.collect().toList
+-      }
+-    })
+-
+-    ssc.start()
+-
+-    eventually(timeout(10000 milliseconds), interval(1000 milliseconds)) {
+-
+-      assert(receivedMessage.length == max)
+-    }
+-    ssc.stop()
+-
+-    amqpTestUtils.stopAMQPServer()
+-  }
+-}
+\ No newline at end of file
+diff --git a/src/test/scala/io/radanalytics/streaming/amqp/AMQPBrokerStreamSuite.scala b/src/test/scala/org/apache/spark/streaming/amqp/AMQPStreamSuite.scala
+similarity index 77%
+rename from src/test/scala/io/radanalytics/streaming/amqp/AMQPBrokerStreamSuite.scala
+rename to src/test/scala/org/apache/spark/streaming/amqp/AMQPStreamSuite.scala
+index 7c7d853..5bdce1f 100644
+--- a/src/test/scala/io/radanalytics/streaming/amqp/AMQPBrokerStreamSuite.scala
++++ b/src/test/scala/org/apache/spark/streaming/amqp/AMQPStreamSuite.scala
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import java.util.Map.Entry
+ import java.util.{Base64, Iterator}
+@@ -24,7 +24,6 @@ import com.fasterxml.jackson.databind.node.ArrayNode
+ import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
+ import com.fasterxml.jackson.module.scala.DefaultScalaModule
+ import org.apache.spark.storage.StorageLevel
+-import org.apache.spark.streaming.amqp.AMQPUtils
+ import org.apache.spark.streaming.{Duration, Seconds, StreamingContext}
+ import org.apache.spark.{SparkConf, SparkFunSuite}
+ import org.scalatest.BeforeAndAfter
+@@ -36,7 +35,7 @@ import scala.concurrent.duration._
+ /**
+  * Scala test suite for the AMQP input stream
+  */
+-class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
++class AMQPStreamSuite extends SparkFunSuite with Eventually with BeforeAndAfter {
+   
+   private val batchDuration: Duration = Seconds(1)
+   private val master: String = "local[2]"
+@@ -57,13 +56,9 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+     
+     amqpTestUtils = new AMQPTestUtils()
+     amqpTestUtils.setup()
+-
+-    amqpTestUtils.startBroker()
+   }
+   
+   after {
+-
+-    amqpTestUtils.stopBroker()
+     
+     if (ssc != null) {
+       ssc.stop()
+@@ -76,12 +71,12 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+ 
+   test("AMQP receive simple body string") {
+ 
++    amqpTestUtils.startBroker()
++
+     val converter = new AMQPBodyFunction[String]
+ 
+     val sendMessage = "Spark Streaming & AMQP"
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
+     
+     var receivedMessage: List[String] = List()
+     receiveStream.foreachRDD(rdd => {
+@@ -97,16 +92,18 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+       assert(sendMessage.equals(receivedMessage(0)))
+     }
+     ssc.stop()
++
++    amqpTestUtils.stopBroker()
+   }
+ 
+   test("AMQP receive list body") {
+ 
++    amqpTestUtils.startBroker()
++
+     val converter = new AMQPJsonFunction()
+ 
+     val list: List[Any] = List("a string", 1, 2)
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
+ 
+     val listStream = receiveStream.map(jsonMsg => {
+ 
+@@ -115,7 +112,7 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+ 
+       var listFinal: ListBuffer[String] = ListBuffer[String]()
+ 
+-      // get an iterator on "section" that is actually an array
++      // get an itarator on "section" that is actually an array
+       val iterator: Iterator[JsonNode] = mapper.readTree(jsonMsg).get("body").get("section").asInstanceOf[ArrayNode].elements()
+       while(iterator.hasNext) {
+         listFinal += iterator.next().asText()
+@@ -138,16 +135,18 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+       assert(list.mkString(",").equals(receivedMessage(0)))
+     }
+     ssc.stop()
++
++    amqpTestUtils.stopBroker()
+   }
+ 
+   test("AMQP receive map body") {
+ 
++    amqpTestUtils.startBroker()
++
+     val converter = new AMQPJsonFunction()
+ 
+     val map:Map[_,_] = Map("field_a" -> "a string", "field_b" -> 1)
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
+ 
+     val mapStream = receiveStream.map(jsonMsg => {
+ 
+@@ -156,7 +155,7 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+ 
+       var listFinal: ListBuffer[String] = ListBuffer[String]()
+ 
+-      // get an iterator on all fields of "section" that is actually a map
++      // get an itarator on all fields of "section" that is actually a map
+       val iterator: Iterator[Entry[String, JsonNode]] = mapper.readTree(jsonMsg).get("body").get("section").fields()
+       while(iterator.hasNext) {
+         val entry: Entry[String, JsonNode] = iterator.next()
+@@ -180,16 +179,18 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+       assert(map.map(t => t._1 + "=" + t._2).mkString(",").equals(receivedMessage(0)))
+     }
+     ssc.stop()
++
++    amqpTestUtils.stopBroker()
+   }
+ 
+   test("AMQP receive array body") {
+ 
++    amqpTestUtils.startBroker()
++
+     val converter = new AMQPJsonFunction()
+ 
+     val array: Array[Any] = Array(1, 2)
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
+ 
+     val listStream = receiveStream.map(jsonMsg => {
+ 
+@@ -198,7 +199,7 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+ 
+       var listFinal: ListBuffer[String] = ListBuffer[String]()
+ 
+-      // get an iterator on "section" that is actually an array
++      // get an itarator on "section" that is actually an array
+       val iterator: Iterator[JsonNode] = mapper.readTree(jsonMsg).get("body").get("section").asInstanceOf[ArrayNode].elements()
+       while(iterator.hasNext) {
+         listFinal += iterator.next().asText()
+@@ -221,16 +222,18 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+       assert(array.mkString(",").equals(receivedMessage(0)))
+     }
+     ssc.stop()
++
++    amqpTestUtils.stopBroker()
+   }
+ 
+   test("AMQP receive binary body") {
+ 
++    amqpTestUtils.startBroker()
++
+     val converter = new AMQPJsonFunction()
+ 
+     val sendMessage = "Spark Streaming & AMQP"
+-    val receiveStream =
+-      AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port,
+-        amqpTestUtils.username, amqpTestUtils.password, address, converter, StorageLevel.MEMORY_ONLY)
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
+ 
+     val binaryStream = receiveStream.map(jsonMsg => {
+ 
+@@ -256,6 +259,38 @@ class AMQPBrokerStreamSuite extends SparkFunSuite with Eventually with BeforeAnd
+       assert(sendMessage.equals(receivedMessage(0)))
+     }
+     ssc.stop()
++
++    amqpTestUtils.stopBroker()
++
+   }
+ 
++  test("AMQP receive server") {
++
++    val sendMessage = "Spark Streaming & AMQP"
++    val max = 10
++    val delay = 100l
++
++    amqpTestUtils.startAMQPServer(sendMessage, max, delay)
++
++    val converter = new AMQPBodyFunction[String]
++
++    val receiveStream = AMQPUtils.createStream(ssc, amqpTestUtils.host, amqpTestUtils.port, address, converter, StorageLevel.MEMORY_ONLY)
++
++    var receivedMessage: List[String] = List()
++    receiveStream.foreachRDD(rdd => {
++      if (!rdd.isEmpty()) {
++        receivedMessage = receivedMessage ::: rdd.collect().toList
++      }
++    })
++
++    ssc.start()
++
++    eventually(timeout(10000 milliseconds), interval(1000 milliseconds)) {
++
++      assert(receivedMessage.length == max)
++    }
++    ssc.stop()
++
++    amqpTestUtils.stopAMQPServer()
++  }
+ }
+\ No newline at end of file
+diff --git a/src/test/scala/io/radanalytics/streaming/amqp/AMQPTestUtils.scala b/src/test/scala/org/apache/spark/streaming/amqp/AMQPTestUtils.scala
+similarity index 98%
+rename from src/test/scala/io/radanalytics/streaming/amqp/AMQPTestUtils.scala
+rename to src/test/scala/org/apache/spark/streaming/amqp/AMQPTestUtils.scala
+index 05fbec6..0aec6d7 100644
+--- a/src/test/scala/io/radanalytics/streaming/amqp/AMQPTestUtils.scala
++++ b/src/test/scala/org/apache/spark/streaming/amqp/AMQPTestUtils.scala
+@@ -15,7 +15,7 @@
+  * limitations under the License.
+  */
+ 
+-package io.radanalytics.streaming.amqp
++package org.apache.spark.streaming.amqp
+ 
+ import java.lang.Long
+ import java.net.URI
+@@ -43,8 +43,6 @@ class AMQPTestUtils {
+   val host: String = "localhost"
+   val port: Int = 5672
+   val address: String = "my_address"
+-  val username: Option[String] = None
+-  val password: Option[String] = None
+ 
+   var vertx: Vertx = _
+ 
